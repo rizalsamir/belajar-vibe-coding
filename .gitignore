@@ -9,6 +9,7 @@ node_modules/
 # Bun / build output
 dist/
 *.log
+*.tsbuildinfo
 
 # Drizzle migrations (local meta if needed)
 drizzle/meta/

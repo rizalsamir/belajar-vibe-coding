@@ -1,6 +1,7 @@
 import { Elysia } from "elysia";
 import { env } from "./config/env";
 import { healthRoute } from "./modules/health/health.route";
+import { usersRoute } from "./routes/users-route";
 
 const app = new Elysia()
   .get("/", () => ({
@@ -9,6 +10,7 @@ const app = new Elysia()
     healthCheck: "/health",
   }))
   .use(healthRoute)
+  .use(usersRoute)
   .listen(env.PORT);
 
 console.log(`🚀 Server is running at http://${app.server?.hostname}:${app.server?.port}`);
