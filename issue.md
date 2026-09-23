@@ -1,29 +1,26 @@
-# Task: Implementasi CRUD dan Registrasi User
+# Task: Implementasi Fitur Login dan Session Management
 
 ## 📌 Tujuan
-Mengimplementasikan fitur CRUD (Create, Read, Update, Delete) untuk entitas User, dengan fokus utama pada endpoint registrasi user baru. Dokumen ini dibuat sebagai panduan langkah demi langkah (step-by-step) untuk diimplementasikan oleh junior programmer atau AI assistant.
+Mengimplementasikan fitur autentikasi (Login) untuk entitas User dan manajemen session menggunakan UUID. Dokumen ini dibuat sebagai panduan langkah demi langkah (step-by-step) untuk diimplementasikan oleh junior programmer atau AI assistant.
 
 ---
 
-## 🗄️ 1. Update Skema Database (Drizzle ORM)
+## 🗄️ 1. Pembuatan Skema Database (Drizzle ORM)
 
-Kita perlu memperbarui tabel `users` yang sudah ada agar sesuai dengan spesifikasi baru.
+Kita perlu membuat tabel baru bernama `sessions` untuk menyimpan data token sesi login pengguna.
 
-**Lokasi file:** `src/db/schema/users.ts`
-
-**Spesifikasi Tabel `users`:**
+**Spesifikasi Tabel `sessions`:**
 - `id`: integer, primary key, auto increment
-- `name`: varchar(255), not null
-- `email`: varchar(255), not null, unique
-- `password`: varchar(255), not null (akan menyimpan hash dari bcrypt)
+- `token`: varchar(255), not null (akan menyimpan UUID)
+- `user_id`: integer, foreign key yang merujuk ke tabel `users` (id)
 - `created_at`: timestamp, default current_timestamp, not null
 - `updated_at`: timestamp, default current_timestamp on update current_timestamp, not null
 
 **Langkah Implementasi:**
-1. Buka file `src/db/schema/users.ts`.
-2. Tambahkan kolom `password` menggunakan `varchar("password", { length: 255 }).notNull()`.
-3. Tambahkan kolom `updatedAt` menggunakan `timestamp("updated_at").defaultNow().onUpdateNow().notNull()`.
-4. Setelah skema diperbarui, jalankan perintah migrasi:
+1. Buat atau perbarui file skema database (misal di `src/db/schema/sessions.ts` atau gabungkan di skema yang ada) dan definisikan tabel `sessions`.
+2. Pastikan Anda menambahkan relasi *foreign key* `user_id` yang merujuk ke tabel `users`.
+3. Daftarkan skema tersebut agar dikenali oleh Drizzle.
+4. Jalankan perintah migrasi untuk memperbarui database:
    ```bash
    bun run db:generate
    bun run db:push
@@ -33,17 +30,10 @@ Kita perlu memperbarui tabel `users` yang sudah ada agar sesuai dengan spesifika
 
 ## 📁 2. Struktur Folder & File
 
-Kita akan menerapkan pemisahan tanggung jawab (separation of concerns) dengan memisahkan routing (Elysia) dan business logic.
+Pastikan kode diletakkan pada folder yang tepat sesuai prinsip *separation of concerns* (memisahkan *routes* dan *services*). Gunakan atau perbarui file yang sudah ada:
 
-Buat folder dan file berikut di dalam direktori `src/`:
-
-```text
-src/
-├── routes/
-│   └── users-route.ts    # Mengatur routing (endpoint, method, payload validation)
-├── services/
-│   └── users-service.ts  # Mengatur logic bisnis (database query, hashing password)
-```
+- **`src/routes/users-route.ts`**: Menangani HTTP routing (Elysia), schema body, dan HTTP status code.
+- **`src/services/users-service.ts`**: Menangani logika bisnis inti aplikasi (interaksi database, verifikasi password, dan pembuatan token).
 
 ---
 
@@ -52,18 +42,15 @@ src/
 **Lokasi file:** `src/services/users-service.ts`
 
 **Tugas:**
-Buat fungsi-fungsi CRUD dasar untuk berinteraksi dengan database menggunakan Drizzle ORM. Kita membutuhkan dependensi `bcryptjs` atau `bun:password` untuk hashing. Karena kita menggunakan Bun, disarankan menggunakan bawaan Bun yaitu `Bun.password`.
+Buat fungsi baru untuk memvalidasi kredensial login dan membuat record session di database.
 
 **Langkah Implementasi:**
-1. Buat fungsi `registerUser(data)`.
-   - Fungsi ini menerima input `name`, `email`, dan `password`.
-   - **Pengecekan:** Query ke database (tabel `users`) apakah `email` sudah terdaftar.
-   - Jika sudah terdaftar, lemparkan error (throw error) atau kembalikan status error.
-   - Jika belum terdaftar:
-     - Hash `password` (misal menggunakan `Bun.password.hash(password)`).
-     - Simpan data user baru (name, email, hashed password) ke tabel `users`.
-     - Kembalikan response sukses.
-2. Buat juga fungsi dummy/skeleton untuk `getAllUsers()`, `getUserById(id)`, `updateUser(id, data)`, dan `deleteUser(id)`.
+1. Buat fungsi `loginUser({ email, password })`.
+2. **Pengecekan User:** Lakukan query (select) ke tabel `users` berdasarkan `email` yang diinput. Jika user tidak ditemukan, *throw error* (misal: `new Error("Email atau password salah")`).
+3. **Pengecekan Password:** Jika user ditemukan, bandingkan `password` input dengan hash yang ada di database menggunakan utilitas bcrypt (contoh di Bun: `Bun.password.verify()`). Jika hasil tidak cocok, *throw error* yang sama.
+4. **Pembuatan Token:** Jika kredensial valid, *generate* sebuah UUID baru (misal menggunakan `crypto.randomUUID()`).
+5. **Simpan Session:** Insert (simpan) token UUID tersebut beserta `user_id` ke dalam tabel `sessions`.
+6. Kembalikan nilai token UUID tersebut (sebagai string) dari fungsi `loginUser`.
 
 ---
 
@@ -72,59 +59,45 @@ Buat fungsi-fungsi CRUD dasar untuk berinteraksi dengan database menggunakan Dri
 **Lokasi file:** `src/routes/users-route.ts`
 
 **Tugas:**
-Mendefinisikan endpoint API untuk users.
+Mendefinisikan endpoint API untuk proses login.
 
-**Spesifikasi Endpoint Registrasi:**
+**Spesifikasi Endpoint Login:**
 - **Method:** `POST`
-- **Path:** `/api/users`
+- **Path:** `/api/users/login`
 - **Request Body (JSON):**
   ```json
   {
-      "name" : "rizal",
       "email" : "rizal@example.com",
       "password" : "rahasia"
   }
   ```
-- **Response Sukses (Status 200/201):**
+- **Response Sukses (Status 200):**
   ```json
   {
-      "data" : "OK"
+      "data" : "d51197c3-30ed-4fb1-a75d-f1e18dc44f2d"
   }
   ```
-- **Response Error (Status 400/409 - Email terdaftar):**
+  *(Catatan: nilai string `data` berisi UUID aktual yang digenerate)*
+- **Response Error (Status 400/401):**
   ```json
   {
-      "data" : "Email sudah terdaftar"
+      "data" : "Email atau password salah"
   }
   ```
 
 **Langkah Implementasi:**
-1. Import `Elysia` dari `"elysia"`.
-2. Import fungsi `registerUser` dari `users-service.ts`.
-3. Buat instance route baru: `export const usersRoute = new Elysia({ prefix: '/api/users' })`.
-4. Tambahkan method `.post('/', async ({ body, set }) => { ... })`.
-5. Di dalam handler, panggil `registerUser`.
-6. Gunakan `try...catch`. 
-   - Jika sukses, return `{ data: "OK" }`.
-   - Jika catch error (karena email duplicate), set `set.status = 400` dan return `{ data: "Email sudah terdaftar" }`.
-7. Tambahkan route lain (GET, PUT, DELETE) yang memanggil service CRUD lainnya.
-
----
-
-## 🔌 5. Registrasi Route ke Main App
-
-**Lokasi file:** `src/index.ts`
-
-**Langkah Implementasi:**
-1. Buka file `src/index.ts`.
-2. Import `usersRoute` dari `src/routes/users-route.ts`.
-3. Daftarkan route tersebut ke instance aplikasi utama menggunakan `.use(usersRoute)`.
+1. Buka `src/routes/users-route.ts`.
+2. Tambahkan *chaining method* `.post('/login', async ({ body, set }) => { ... })` ke *instance* router `usersRoute`.
+3. Gunakan blok `try...catch` di dalam *handler*.
+4. Pada blok `try`, panggil fungsi `loginUser(body)`. Jika sukses, *return* `{ data: token }`.
+5. Pada blok `catch`, evaluasi tipe error. Jika error karena kredensial tidak valid, ubah status HTTP menjadi 400 (melalui `set.status = 400`), lalu kembalikan JSON `{ data: "Email atau password salah" }`.
+6. Validasi tipe request body menggunakan standar skema bawaan Elysia (`t.Object`).
 
 ---
 
 ## ✅ Kriteria Selesai (Acceptance Criteria)
-- [ ] Skema database `users` sudah memiliki kolom `password` dan `updated_at`.
-- [ ] Berhasil melakukan HTTP POST ke `/api/users` dengan body JSON yang valid dan mendapatkan response `{"data": "OK"}`.
-- [ ] Jika melakukan HTTP POST kedua kalinya dengan email yang sama, sistem merespons dengan `{"data": "Email sudah terdaftar"}`.
-- [ ] Password tersimpan di database dalam bentuk hash, bukan plain-text.
-- [ ] Struktur folder `routes/` dan `services/` sudah digunakan dengan benar sesuai instruksi.
+- [ ] Tabel `sessions` berhasil terbentuk dan berelasi *(Foreign Key)* ke tabel `users`.
+- [ ] Jika dikirim `POST` ke `/api/users/login` dengan kredensial yang valid, sistem merespons format JSON `{ "data": "<UUID>" }`.
+- [ ] Session login (UUID beserta User ID terkait) berhasil tersimpan ke dalam tabel `sessions` di setiap kali proses login sukses.
+- [ ] Jika kredensial *(email/password)* salah atau *email* tidak terdaftar, endpoint dengan konsisten menolak dan merespons `{ "data": "Email atau password salah" }`.
+- [ ] Pemisahan kode logic di `users-service.ts` dan logic HTTP di `users-route.ts` ditaati.

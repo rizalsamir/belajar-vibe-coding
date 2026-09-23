@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { db } from "../db";
-import { users } from "../db/schema";
+import { sessions, users } from "../db/schema";
+
 
 export interface RegisterUserInput {
   name: string;
@@ -89,4 +90,45 @@ export async function updateUser(id: number, input: UpdateUserInput) {
 export async function deleteUser(id: number) {
   await db.delete(users).where(eq(users.id, id));
   return { success: true };
+}
+
+export interface LoginUserInput {
+  email: string;
+  password: string;
+}
+
+export async function loginUser(input: LoginUserInput): Promise<string> {
+  // Cari user berdasarkan email
+  const result = await db
+    .select()
+    .from(users)
+    .where(eq(users.email, input.email))
+    .limit(1);
+
+  if (result.length === 0) {
+    throw new Error("Email atau password salah");
+  }
+
+  const user = result[0];
+
+  // Verifikasi password menggunakan bcrypt bawaan Bun
+  const isPasswordValid = await Bun.password.verify(
+    input.password,
+    user.password
+  );
+
+  if (!isPasswordValid) {
+    throw new Error("Email atau password salah");
+  }
+
+  // Generate UUID sebagai token session
+  const token = crypto.randomUUID();
+
+  // Simpan session ke database
+  await db.insert(sessions).values({
+    token,
+    userId: user.id,
+  });
+
+  return token;
 }
