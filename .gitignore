@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Bun / build output
+dist/
+*.log
+
+# Drizzle migrations (local meta if needed)
+drizzle/meta/
+
+# OS and IDE files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
