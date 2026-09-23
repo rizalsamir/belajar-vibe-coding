@@ -3,9 +3,11 @@ import {
   deleteUser,
   getAllUsers,
   getUserById,
+  loginUser,
   registerUser,
   updateUser,
 } from "../services/users-service";
+
 
 export const usersRoute = new Elysia({ prefix: "/api/users" })
   .post(
@@ -71,4 +73,22 @@ export const usersRoute = new Elysia({ prefix: "/api/users" })
     }
     await deleteUser(Number(id));
     return { data: "OK" };
-  });
+  })
+  .post(
+    "/login",
+    async ({ body, set }) => {
+      try {
+        const token = await loginUser(body);
+        return { data: token };
+      } catch (error: any) {
+        set.status = 400;
+        return { data: "Email atau password salah" };
+      }
+    },
+    {
+      body: t.Object({
+        email: t.String(),
+        password: t.String(),
+      }),
+    }
+  );
